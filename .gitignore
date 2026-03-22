@@ -1,0 +1,15 @@
+.DS_Store
+Thumbs.db
+
+.cursor/
+.vscode/
+
+.env
+.env.*
+!.env.example
+
+node_modules/
+dist/
+coverage/
+
+*.log
