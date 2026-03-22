@@ -1,0 +1,56 @@
+{
+  "auth": {
+    "profiles": {
+      "aihubmix:default": {
+        "provider": "aihubmix",
+        "mode": "api_key"
+      }
+    },
+    "order": {
+      "default": ["aihubmix:default"]
+    }
+  },
+  "agents": {
+    "defaults": {
+      "workspace": "~/.openclaw/workspace",
+      "model": {
+        "primary": "aihubmix/claude-opus-4-6"
+      }
+    }
+  },
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "aihubmix": {
+        "baseUrl": "https://aihubmix.com",
+        "api": "anthropic-messages",
+        "models": [
+          { "id": "claude-opus-4-6", "name": "claude-opus-4-6", "contextWindow": 128000 },
+          { "id": "claude-sonnet-4-5-20250514", "name": "claude-sonnet-4-5-20250514", "contextWindow": 128000 },
+          { "id": "gpt-5", "name": "gpt-5", "contextWindow": 128000 },
+          { "id": "gpt-5-mini", "name": "gpt-5-mini", "contextWindow": 128000 },
+          { "id": "gpt-4.1", "name": "gpt-4.1", "contextWindow": 128000 },
+          { "id": "gpt-4o", "name": "gpt-4o", "contextWindow": 128000 },
+          { "id": "o3", "name": "o3", "contextWindow": 128000 },
+          { "id": "o4-mini", "name": "o4-mini", "contextWindow": 128000 },
+          { "id": "DeepSeek-V3", "name": "DeepSeek-V3", "contextWindow": 128000 },
+          { "id": "DeepSeek-R1", "name": "DeepSeek-R1", "contextWindow": 128000 },
+          { "id": "gemini-2.5-pro", "name": "gemini-2.5-pro", "contextWindow": 128000 },
+          { "id": "gemini-2.5-flash", "name": "gemini-2.5-flash", "contextWindow": 128000 },
+          { "id": "gemini-3-pro-preview", "name": "gemini-3-pro-preview", "contextWindow": 128000 },
+          { "id": "gemini-3-flash-preview", "name": "gemini-3-flash-preview", "contextWindow": 128000 },
+          { "id": "Qwen3-235B-A22B-Instruct-2507", "name": "Qwen3-235B-A22B-Instruct-2507", "contextWindow": 128000 },
+          { "id": "kimi-k2-0711-preview", "name": "kimi-k2-0711-preview", "contextWindow": 128000 }
+        ]
+      }
+    }
+  },
+  "gateway": {
+    "port": 18789,
+    "bind": "loopback",
+    "auth": {
+      "mode": "token"
+    },
+    "mode": "local"
+  }
+}

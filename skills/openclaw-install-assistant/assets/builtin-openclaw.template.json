@@ -1,0 +1,29 @@
+{
+  "auth": {
+    "profiles": {
+      "__PROFILE_ID__": {
+        "provider": "__PROVIDER__",
+        "mode": "api_key"
+      }
+    },
+    "order": {
+      "default": ["__PROFILE_ID__"]
+    }
+  },
+  "agents": {
+    "defaults": {
+      "workspace": "~/.openclaw/workspace",
+      "model": {
+        "primary": "__PRIMARY_MODEL__"
+      }
+    }
+  },
+  "gateway": {
+    "port": 18789,
+    "bind": "loopback",
+    "auth": {
+      "mode": "token"
+    },
+    "mode": "local"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "profiles": {
+    "__PROFILE_ID__": {
+      "type": "api_key",
+      "provider": "__PROVIDER__",
+      "key": "__API_KEY__"
+    }
+  }
+}
