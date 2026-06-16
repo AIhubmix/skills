@@ -1,0 +1,4 @@
+interface:
+  display_name: "AIHubMix API"
+  short_description: "Query AIHubMix models and API contracts"
+  default_prompt: "Use $aihubmix-api to list AIHubMix models, compare pricing/context, or generate an API call example."

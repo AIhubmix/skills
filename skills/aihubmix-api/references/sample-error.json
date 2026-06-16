@@ -1,0 +1,8 @@
+{
+  "error": {
+    "message": "bad key",
+    "type": "authentication_error",
+    "param": null,
+    "code": null
+  }
+}
