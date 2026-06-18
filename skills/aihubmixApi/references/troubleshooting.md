@@ -50,7 +50,7 @@ and 5XX responses:
 ## Useful Commands
 
 ```bash
-python scripts/aihubmix_api.py protocols
-python scripts/aihubmix_api.py get <model-id>
-python scripts/aihubmix_api.py troubleshoot --status 400 --body-file error.json --endpoint /v1/chat/completions --model <model-id>
+python scripts/aihubmixApi.py protocols
+python scripts/aihubmixApi.py get <model-id>
+python scripts/aihubmixApi.py troubleshoot --status 400 --body-file error.json --endpoint /v1/chat/completions --model <model-id>
 ```

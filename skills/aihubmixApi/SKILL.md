@@ -1,5 +1,5 @@
 ---
-name: aihubmix-api
+name: aihubmixApi
 description: "Integrate, query, and use AIHubMix API/model access from live sources. Use for Chinese or English requests about adding AIHubMix to an app or project, generating runnable SDK/API code, selecting model IDs, listing latest models, model-family introductions, pricing, context/max output, capabilities, providers or aliases such as GPT/OpenAI, Gemini/Google/谷歌, Claude/Anthropic/Opus/Sonnet, Qwen/通义/千问, Kimi/Moonshot/月之暗面, DeepSeek/深度求索, Doubao/豆包, GLM/智谱 when the context is AIHubMix; OpenAI-compatible/Anthropic/Gemini gateway calls; Windows PowerShell, macOS/Linux curl, JavaScript and Python examples; aihubmix-openapi contract details; API keys/auth headers; and API error troubleshooting such as 400/401/403/404/429/5XX, garbled output, empty content, or X-Request-Id. Do not use for unrelated general model news or non-AIHubMix API questions unless the user asks to compare with, route through, or call the model via AIHubMix."
 ---
 
@@ -41,7 +41,7 @@ Load only the module needed for the user's request:
    generate standalone examples, compare models, inspect protocol contracts,
    check SDK usage, or troubleshoot an error.
 2. Read the relevant reference module from the module map above.
-3. Prefer `scripts/aihubmix_api.py` for repeatable data lookup, example
+3. Prefer `scripts/aihubmixApi.py` for repeatable data lookup, example
    generation, SDK inspection, protocol inspection, and troubleshooting.
 4. Use remote authoritative sources in user-facing answers:
    - Model data: `https://aihubmix.com/api/v1/models`
@@ -59,23 +59,23 @@ Use the script from the skill directory. It uses Python standard library and
 does not ship local model/price/context data.
 
 ```bash
-python scripts/aihubmix_api.py doctor --model <model-id> --image
-python scripts/aihubmix_api.py candidates --capability vision   # image-gen | video | audio-tts | audio-stt | embedding | rerank
-python scripts/aihubmix_api.py candidates --capability vision --mine   # only models YOUR token can call (needs aihubmix CLI + login)
-python scripts/aihubmix_api.py install-cli      # install the companion aihubmix CLI (official per-OS installer)
-python scripts/aihubmix_api.py list --limit 20
-python scripts/aihubmix_api.py latest-report --limit 5
-python scripts/aihubmix_api.py report <query>
-python scripts/aihubmix_api.py get <model-id>
-python scripts/aihubmix_api.py compare <model-a> <model-b> <model-c>
-python scripts/aihubmix_api.py example chat --model <model-id>
-python scripts/aihubmix_api.py example messages --model <model-id>
-python scripts/aihubmix_api.py example gemini --model <model-id>
-python scripts/aihubmix_api.py protocols
-python scripts/aihubmix_api.py error-contract
-python scripts/aihubmix_api.py sdk-check --version 2.1.0
-python scripts/aihubmix_api.py sdk-info --version 2.1.0
-python scripts/aihubmix_api.py troubleshoot --status 401 --body-file error.json --endpoint /v1/chat/completions --model <model-id>
+python scripts/aihubmixApi.py doctor --model <model-id> --image
+python scripts/aihubmixApi.py candidates --capability vision   # image-gen | video | audio-tts | audio-stt | embedding | rerank
+python scripts/aihubmixApi.py candidates --capability vision --mine   # only models YOUR token can call (needs aihubmix CLI + login)
+python scripts/aihubmixApi.py install-cli      # install the companion aihubmix CLI (official per-OS installer)
+python scripts/aihubmixApi.py list --limit 20
+python scripts/aihubmixApi.py latest-report --limit 5
+python scripts/aihubmixApi.py report <query>
+python scripts/aihubmixApi.py get <model-id>
+python scripts/aihubmixApi.py compare <model-a> <model-b> <model-c>
+python scripts/aihubmixApi.py example chat --model <model-id>
+python scripts/aihubmixApi.py example messages --model <model-id>
+python scripts/aihubmixApi.py example gemini --model <model-id>
+python scripts/aihubmixApi.py protocols
+python scripts/aihubmixApi.py error-contract
+python scripts/aihubmixApi.py sdk-check --version 2.1.0
+python scripts/aihubmixApi.py sdk-info --version 2.1.0
+python scripts/aihubmixApi.py troubleshoot --status 401 --body-file error.json --endpoint /v1/chat/completions --model <model-id>
 ```
 
 The `--source` option is only for one-off debugging with caller-provided JSON.
@@ -113,7 +113,7 @@ video, audio, embeddings…).
 
 ## Account And Auth (aihubmix CLI)
 
-`scripts/aihubmix_api.py` only sees PUBLIC data. For anything account-specific —
+`scripts/aihubmixApi.py` only sees PUBLIC data. For anything account-specific —
 the user's **balance**, their **API keys**, or **which models their token can
 actually call** — use the companion `aihubmix` CLI (see `references/cli.md`). It
 is the authenticated counterpart to the public-data commands.
@@ -131,7 +131,7 @@ is the authenticated counterpart to the public-data commands.
 - The CLI is optional and installed separately. If it is missing or the user is
   not logged in, fall back to public-data commands and point them to
   `references/cli.md` for install / `login`. Install it on the spot with
-  `aihubmix_api.py install-cli` (or `--mine --auto-install`). The CLI's durable
+  `aihubmixApi.py install-cli` (or `--mine --auto-install`). The CLI's durable
   home is `https://github.com/AIhubmix/platfrom-cli`.
 - Secrets: `keys get` and `keys token` return real key values — never print them
   in full or write them to repo files; mask like `AIHUBMIX_API_KEY`.

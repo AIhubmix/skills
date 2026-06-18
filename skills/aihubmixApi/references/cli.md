@@ -7,7 +7,7 @@ can actually call**. Use it for any account / balance / key / "what can *I*
 access" question, and to ground integration in what the user really has.
 
 `aihubmix` is a separate companion binary, not bundled with this skill. The
-skill's `scripts/aihubmix_api.py` covers public catalog/contract data; the
+skill's `scripts/aihubmixApi.py` covers public catalog/contract data; the
 `aihubmix` CLI covers authenticated account data. They are complementary.
 
 ## Install
@@ -31,7 +31,7 @@ Or let this skill install it (auto-detects your OS and runs the official
 installer above):
 
 ```bash
-python scripts/aihubmix_api.py install-cli
+python scripts/aihubmixApi.py install-cli
 ```
 
 Installs to `%LOCALAPPDATA%\aihubmix\bin` (Windows) or `~/.local/bin` /
@@ -88,7 +88,7 @@ The CLI wraps the AIHubMix **Platform API**. Endpoint → command:
   This is the user's REAL access list. The public `/api/v1/models` is the full
   catalog and does NOT reflect per-key permission, so prefer this for "what *I*
   can use" and for picking a model during integration.
-- "which of these candidates can *I* use?" → `aihubmix_api.py candidates
+- "which of these candidates can *I* use?" → `aihubmixApi.py candidates
   --capability <X> --mine` intersects the public candidate range with this list
   automatically (add `--auto-install` to install the CLI if missing).
 - "我的 key / 列出或新建我的 API Key" → `aihubmix keys list -j`, `keys create`.

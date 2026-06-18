@@ -8,11 +8,11 @@ single-model detail, price/context comparison, and model ID selection.
 Run from the skill directory:
 
 ```bash
-python scripts/aihubmix_api.py list --limit 50
-python scripts/aihubmix_api.py report <query> --limit 5
-python scripts/aihubmix_api.py latest-report --limit 5
-python scripts/aihubmix_api.py get <model-id>
-python scripts/aihubmix_api.py compare <model-a> <model-b> <model-c>
+python scripts/aihubmixApi.py list --limit 50
+python scripts/aihubmixApi.py report <query> --limit 5
+python scripts/aihubmixApi.py latest-report --limit 5
+python scripts/aihubmixApi.py get <model-id>
+python scripts/aihubmixApi.py compare <model-a> <model-b> <model-c>
 ```
 
 Use `--source` only for caller-provided one-off debugging. Default to
@@ -57,7 +57,7 @@ terms` line so users can see how nicknames were resolved.
 When the user asks for latest models with price/context/example:
 
 ```bash
-python scripts/aihubmix_api.py latest-report --limit 5
+python scripts/aihubmixApi.py latest-report --limit 5
 ```
 
 Use the report output directly unless the user asks for a different format.
@@ -79,7 +79,7 @@ The report must include:
 When the user provides a model ID or asks about one model:
 
 ```bash
-python scripts/aihubmix_api.py get <model-id>
+python scripts/aihubmixApi.py get <model-id>
 ```
 
 Return model ID, display name, provider/developer, context, max output,
@@ -92,7 +92,7 @@ facts.
 When comparing price, context, max output, or capability:
 
 ```bash
-python scripts/aihubmix_api.py compare <model-a> <model-b> ...
+python scripts/aihubmixApi.py compare <model-a> <model-b> ...
 ```
 
 Compare only fields returned by the model API. Always show the price unit.
@@ -137,13 +137,13 @@ For "which model can do X" requests (X = 图片输入/看图, 文生图, 文生�
 tag; some incapable ones carry it).
 
 ```bash
-python scripts/aihubmix_api.py candidates --capability vision     --limit 40
-python scripts/aihubmix_api.py candidates --capability image-gen
-python scripts/aihubmix_api.py candidates --capability video
-python scripts/aihubmix_api.py candidates --capability audio-tts
-python scripts/aihubmix_api.py candidates --capability audio-stt
-python scripts/aihubmix_api.py candidates --capability embedding
-python scripts/aihubmix_api.py candidates --capability rerank
+python scripts/aihubmixApi.py candidates --capability vision     --limit 40
+python scripts/aihubmixApi.py candidates --capability image-gen
+python scripts/aihubmixApi.py candidates --capability video
+python scripts/aihubmixApi.py candidates --capability audio-tts
+python scripts/aihubmixApi.py candidates --capability audio-stt
+python scripts/aihubmixApi.py candidates --capability embedding
+python scripts/aihubmixApi.py candidates --capability rerank
 ```
 
 Aliases are accepted (e.g. `多模态`/`mm` → vision, `t2i`/`生图` → image-gen,
@@ -159,7 +159,7 @@ range, let the calling model pick what fits the task and budget, then confirm th
 choice actually works:
 
 ```bash
-python scripts/aihubmix_api.py doctor --model <model-id> --image   # vision probe
+python scripts/aihubmixApi.py doctor --model <model-id> --image   # vision probe
 ```
 
 ### Filter to what the user can actually call (`--mine`)
@@ -168,8 +168,8 @@ Add `--mine` to intersect the candidate range with the models the user's token
 can really call (via `aihubmix models list`), so selection isn't a guess:
 
 ```bash
-python scripts/aihubmix_api.py candidates --capability vision --mine
-python scripts/aihubmix_api.py candidates --capability image-gen --mine --auto-install
+python scripts/aihubmixApi.py candidates --capability vision --mine
+python scripts/aihubmixApi.py candidates --capability image-gen --mine --auto-install
 ```
 
 `--mine` needs the companion `aihubmix` CLI + login (`references/cli.md`). If the
@@ -182,7 +182,7 @@ the command is unchanged and has no CLI dependency.
 Before wiring a key into a project, or when debugging `401`/auth problems, run:
 
 ```bash
-AIHUBMIX_API_KEY=<key> python scripts/aihubmix_api.py doctor --model <id> --image
+AIHUBMIX_API_KEY=<key> python scripts/aihubmixApi.py doctor --model <id> --image
 ```
 
 It validates auth with a real minimal call (the public `/v1/models` list does

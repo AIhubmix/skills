@@ -6,10 +6,10 @@ capabilities, whether the SDK source is enough, or whether to upgrade.
 ## Commands
 
 ```bash
-python scripts/aihubmix_api.py sdk-check --version 2.1.0
-python scripts/aihubmix_api.py sdk-info --version 2.1.0
-python scripts/aihubmix_api.py sdk-check --project /path/to/project --version 2.1.0
-python scripts/aihubmix_api.py sdk-info --project /path/to/project --version 2.1.0
+python scripts/aihubmixApi.py sdk-check --version 2.1.0
+python scripts/aihubmixApi.py sdk-info --version 2.1.0
+python scripts/aihubmixApi.py sdk-check --project /path/to/project --version 2.1.0
+python scripts/aihubmixApi.py sdk-info --project /path/to/project --version 2.1.0
 ```
 
 Use the npm registry as the remote source:

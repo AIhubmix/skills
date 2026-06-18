@@ -33,8 +33,8 @@ The documentation entries "Anthropic Compatible / Create a Message" and
 "Google Vertex AI Compatible / Generate Content" are covered by:
 
 ```bash
-python scripts/aihubmix_api.py example messages --model <claude-or-anthropic-model-id>
-python scripts/aihubmix_api.py example gemini --model <gemini-model-id>
+python scripts/aihubmixApi.py example messages --model <claude-or-anthropic-model-id>
+python scripts/aihubmixApi.py example gemini --model <gemini-model-id>
 ```
 
 ## Protocol Selection
@@ -65,21 +65,21 @@ If a model's endpoint field is empty:
 ## Example Commands
 
 ```bash
-python scripts/aihubmix_api.py example chat --model <model-id>
-python scripts/aihubmix_api.py example responses --model <model-id> --lang json
-python scripts/aihubmix_api.py example embeddings --model <model-id>
-python scripts/aihubmix_api.py example images --model <model-id>
-python scripts/aihubmix_api.py example videos --model <model-id>
-python scripts/aihubmix_api.py example video-retrieve --model <model-id>
-python scripts/aihubmix_api.py example video-delete --model <model-id>
-python scripts/aihubmix_api.py example video-content --model <model-id>
-python scripts/aihubmix_api.py example video-remix --model <model-id>
-python scripts/aihubmix_api.py example audio-speech --model <model-id>
-python scripts/aihubmix_api.py example audio-transcriptions --model <model-id>
-python scripts/aihubmix_api.py example audio-translations --model <model-id>
-python scripts/aihubmix_api.py example moderations --model <model-id>
-python scripts/aihubmix_api.py example messages --model <model-id>
-python scripts/aihubmix_api.py example gemini --model <model-id>
+python scripts/aihubmixApi.py example chat --model <model-id>
+python scripts/aihubmixApi.py example responses --model <model-id> --lang json
+python scripts/aihubmixApi.py example embeddings --model <model-id>
+python scripts/aihubmixApi.py example images --model <model-id>
+python scripts/aihubmixApi.py example videos --model <model-id>
+python scripts/aihubmixApi.py example video-retrieve --model <model-id>
+python scripts/aihubmixApi.py example video-delete --model <model-id>
+python scripts/aihubmixApi.py example video-content --model <model-id>
+python scripts/aihubmixApi.py example video-remix --model <model-id>
+python scripts/aihubmixApi.py example audio-speech --model <model-id>
+python scripts/aihubmixApi.py example audio-transcriptions --model <model-id>
+python scripts/aihubmixApi.py example audio-translations --model <model-id>
+python scripts/aihubmixApi.py example moderations --model <model-id>
+python scripts/aihubmixApi.py example messages --model <model-id>
+python scripts/aihubmixApi.py example gemini --model <model-id>
 ```
 
 ## Standalone Example Output

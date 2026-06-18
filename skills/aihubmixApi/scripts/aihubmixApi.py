@@ -231,7 +231,7 @@ def load_json_source(source: str | None) -> Any:
             source,
             headers={
                 "Accept": "application/json",
-                "User-Agent": "aihubmix-api-skill/0.1",
+                "User-Agent": "aihubmixApi-skill/0.1",
             },
         )
         try:
@@ -1200,7 +1200,7 @@ def fetch_npm_package_metadata() -> dict[str, Any] | None:
         SDK_REGISTRY_URL,
         headers={
             "Accept": "application/json",
-            "User-Agent": "aihubmix-api-skill/0.1",
+            "User-Agent": "aihubmixApi-skill/0.1",
         },
     )
     try:
@@ -1217,7 +1217,7 @@ def fetch_npm_package_metadata() -> dict[str, Any] | None:
 def read_url_bytes(url: str) -> bytes:
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": "aihubmix-api-skill/0.1"},
+        headers={"User-Agent": "aihubmixApi-skill/0.1"},
     )
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
@@ -2311,7 +2311,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "User-Agent": "aihubmix-api-skill/0.1",
+        "User-Agent": "aihubmixApi-skill/0.1",
     }
 
     # The public /v1/models list does NOT require auth, so it cannot validate a
