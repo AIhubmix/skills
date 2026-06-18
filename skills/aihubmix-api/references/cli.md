@@ -64,6 +64,23 @@ aihubmix keys create | update | delete ...   # manage keys
 aihubmix keys token        # the current user's token
 ```
 
+## Platform API ↔ command map
+
+The CLI wraps the AIHubMix **Platform API**. Endpoint → command:
+
+| Platform API endpoint | CLI command |
+|---|---|
+| Model Management API (GET) | `aihubmix models list` |
+| Current User Info (GET) | `aihubmix me` (or `whoami`) |
+| Get KEY List (GET) | `aihubmix keys list` |
+| Create New KEY (POST) | `aihubmix keys create` |
+| Update KEY (PUT) | `aihubmix keys update <id>` |
+| Retrieve Single KEY Details (GET) | `aihubmix keys get <id>` |
+| Delete KEY (DEL) | `aihubmix keys delete <id> [--yes]` |
+| Search KEY (GET) | `aihubmix keys search <keyword>` |
+| Obtain User KEY (GET) | `aihubmix keys token` |
+| Available Models (GET) | `aihubmix models list` |
+
 ## When to use it
 
 - "我的余额 / how much credit do I have?" → `aihubmix whoami -j` (or `me -j`).
