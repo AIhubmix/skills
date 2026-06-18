@@ -16,6 +16,8 @@ import json
 import os
 import platform
 import re
+import shutil
+import subprocess
 import sys
 import tarfile
 import textwrap
@@ -23,6 +25,28 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
+
+
+# Force UTF-8 stdout/stderr so Chinese output is not mangled to GBK mojibake
+# on Windows or when the stream is redirected/piped (default code page there
+# is cp936, not UTF-8).
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):  # non-reconfigurable stream
+        pass
+
+
+# Output language for status lines/labels: "en" (default, neutral) or "zh".
+# Set via the global --lang flag or AIHUBMIX_LANG; main() resolves it into _LANG.
+_LANG = (os.environ.get("AIHUBMIX_LANG") or "en").strip().lower()
+if _LANG not in ("en", "zh"):
+    _LANG = "en"
+
+
+def _t(en: str, zh: str) -> str:
+    """Pick output text by the resolved language (data values are never translated)."""
+    return zh if _LANG == "zh" else en
 
 
 DEFAULT_MODELS_URL = "https://aihubmix.com/api/v1/models"
@@ -35,6 +59,150 @@ OPENAPI_REPO_URL = "https://github.com/AIhubmix/aihubmix-openapi"
 OPENAPI_JSON_URL = "https://aihubmix.com/openapi.json"
 CONTRACT_JSON_URL = "https://aihubmix.com/contract.json"
 GATEWAY_ERRORS_URL = "https://github.com/AIhubmix/aihubmix-openapi/blob/main/gateway/errors.yml"
+
+# Companion `aihubmix` CLI. The repo URL is the durable anchor shown everywhere
+# (stable even if the install scripts move); the raw install scripts are the
+# per-OS executable entrypoints, derived from the same repo path so there is a
+# single source of truth and the CLI can always be re-found.
+CLI_BIN = "aihubmix"
+CLI_REPO = "AIhubmix/platfrom-cli"
+CLI_REPO_URL = f"https://github.com/{CLI_REPO}"
+CLI_RAW_BASE = f"https://raw.githubusercontent.com/{CLI_REPO}/main"
+CLI_INSTALL_PS1 = f"{CLI_RAW_BASE}/install.ps1"
+CLI_INSTALL_SH = f"{CLI_RAW_BASE}/install.sh"
+
+PROTOCOL_ALIASES = {
+    "chat": "chat",
+    "chat-completions": "chat",
+    "model-response": "responses",
+    "model-responses": "responses",
+    "response": "responses",
+    "completion": "completions",
+    "embedding": "embeddings",
+    "image": "images",
+    "image-generation": "images",
+    "video": "videos",
+    "retrieve-video": "video-retrieve",
+    "download-video": "video-content",
+    "video-download": "video-content",
+    "remix-video": "video-remix",
+    "speech": "audio-speech",
+    "tts": "audio-speech",
+    "transcription": "audio-transcriptions",
+    "translation": "audio-translations",
+    "moderation": "moderations",
+    "message": "messages",
+    "anthropic": "messages",
+    "generate-content": "gemini",
+    "vertex": "gemini",
+    "google": "gemini",
+}
+
+PROTOCOL_SPECS: dict[str, dict[str, Any]] = {
+    "chat": {
+        "label": "OpenAI-Compatible Chat",
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "family": "openai",
+    },
+    "responses": {
+        "label": "OpenAI Model Responses",
+        "method": "POST",
+        "path": "/v1/responses",
+        "family": "openai",
+    },
+    "completions": {
+        "label": "OpenAI-Compatible Legacy Completion",
+        "method": "POST",
+        "path": "/v1/completions",
+        "family": "openai",
+    },
+    "embeddings": {
+        "label": "OpenAI-Compatible Embeddings",
+        "method": "POST",
+        "path": "/v1/embeddings",
+        "family": "openai",
+    },
+    "images": {
+        "label": "OpenAI-Compatible Image Generation",
+        "method": "POST",
+        "path": "/v1/images/generations",
+        "family": "openai",
+    },
+    "videos": {
+        "label": "OpenAI-Compatible Video Creation",
+        "method": "POST",
+        "path": "/v1/videos",
+        "family": "openai",
+    },
+    "video-retrieve": {
+        "label": "OpenAI-Compatible Video Retrieval",
+        "method": "GET",
+        "path": "/v1/videos/{video_id}",
+        "family": "openai",
+        "needs_video_id": True,
+    },
+    "video-delete": {
+        "label": "OpenAI-Compatible Video Deletion",
+        "method": "DELETE",
+        "path": "/v1/videos/{video_id}",
+        "family": "openai",
+        "needs_video_id": True,
+    },
+    "video-content": {
+        "label": "OpenAI-Compatible Video Content Download",
+        "method": "GET",
+        "path": "/v1/videos/{video_id}/content",
+        "family": "openai",
+        "needs_video_id": True,
+    },
+    "video-remix": {
+        "label": "OpenAI-Compatible Video Remix",
+        "method": "POST",
+        "path": "/v1/videos/{video_id}/remix",
+        "family": "openai",
+        "needs_video_id": True,
+    },
+    "audio-speech": {
+        "label": "OpenAI-Compatible Speech",
+        "method": "POST",
+        "path": "/v1/audio/speech",
+        "family": "openai",
+        "binary_response": True,
+    },
+    "audio-transcriptions": {
+        "label": "OpenAI-Compatible Audio Transcription",
+        "method": "POST",
+        "path": "/v1/audio/transcriptions",
+        "family": "openai",
+        "multipart": True,
+    },
+    "audio-translations": {
+        "label": "OpenAI-Compatible Audio Translation",
+        "method": "POST",
+        "path": "/v1/audio/translations",
+        "family": "openai",
+        "multipart": True,
+    },
+    "moderations": {
+        "label": "OpenAI-Compatible Moderation",
+        "method": "POST",
+        "path": "/v1/moderations",
+        "family": "openai",
+    },
+    "messages": {
+        "label": "Claude/Anthropic-Compatible Messages",
+        "method": "POST",
+        "path": "/v1/messages",
+        "family": "anthropic",
+    },
+    "gemini": {
+        "label": "Google Vertex/Gemini-Compatible Generate Content",
+        "method": "POST",
+        "path": "/gemini/v1beta/models/{model}:generateContent",
+        "family": "gemini",
+    },
+}
 
 
 def display_models_source() -> str:
@@ -50,10 +218,11 @@ def display_openapi_source(filename: str = "openapi.json") -> str:
 
 
 def display_error_contract_source() -> str:
-    return GATEWAY_ERRORS_URL
+    return OPENAPI_JSON_URL
 
 
 def load_json_source(source: str | None) -> Any:
+    # Always fetch live (no caching): every lookup hits the source directly.
     source = source or os.environ.get("AIHUBMIX_MODELS_URL") or DEFAULT_MODELS_URL
     if source == "-":
         return json.load(sys.stdin)
@@ -215,7 +384,8 @@ def query_time_label() -> str:
         offset_label = f"UTC{offset[:3]}:{offset[3:]}"
     else:
         offset_label = "local timezone"
-    return f"{now.strftime('%Y-%m-%d %H:%M:%S')} (本地时间，{offset_label})"
+    stamp = now.strftime("%Y-%m-%d %H:%M:%S")
+    return _t(f"{stamp} (local time, {offset_label})", f"{stamp} (本地时间，{offset_label})")
 
 
 def types(model: dict[str, Any]) -> str:
@@ -269,8 +439,22 @@ def suggested_protocol(model: dict[str, Any]) -> str | None:
         return "responses"
     if "chat_completions" in raw_endpoint:
         return "chat"
-    if any(value in raw_endpoint or value in raw_type for value in ("embedding", "image", "audio", "speech", "transcription", "video")):
-        return None
+    if "embedding" in raw_endpoint or "embedding" in raw_type:
+        return "embeddings"
+    if any(value in raw_endpoint or value in raw_type for value in ("image_generation", "image")):
+        return "images"
+    if any(value in raw_endpoint or value in raw_type for value in ("video", "videos")):
+        return "videos"
+    if any(value in raw_endpoint or value in raw_type for value in ("speech", "tts")):
+        return "audio-speech"
+    if "transcription" in raw_endpoint or "transcription" in raw_type:
+        return "audio-transcriptions"
+    if "translation" in raw_endpoint or "translation" in raw_type:
+        return "audio-translations"
+    if "moderation" in raw_endpoint or "moderation" in raw_type:
+        return "moderations"
+    if "audio" in raw_endpoint or "audio" in raw_type:
+        return "audio-transcriptions"
     if "llm" in raw_type or "chat" in raw_type:
         return "chat"
     if any(value in searchable for value in ("gemini", "claude", "anthropic")):
@@ -281,13 +465,8 @@ def suggested_protocol(model: dict[str, Any]) -> str | None:
 
 
 def protocol_name(protocol: str) -> str:
-    labels = {
-        "chat": "OpenAI-Compatible Chat",
-        "responses": "OpenAI Responses",
-        "messages": "Claude/Anthropic-Compatible Messages",
-        "gemini": "Gemini Native",
-    }
-    return labels[protocol]
+    protocol = normalize_protocol(protocol)
+    return PROTOCOL_SPECS[protocol]["label"]
 
 
 def protocol_auth_label(protocol: str) -> str:
@@ -853,80 +1032,47 @@ def cmd_report(args: argparse.Namespace) -> None:
     print("```")
 
 
-def repo_candidates(explicit: str | None = None) -> list[Path]:
-    candidates = []
-    if explicit:
-        candidates.append(Path(explicit).expanduser())
-    env_repo = os.environ.get("AIHUBMIX_OPENAPI_REPO")
-    if env_repo:
-        candidates.append(Path(env_repo).expanduser())
-    cwd = Path.cwd()
-    for path in [cwd, *cwd.parents]:
-        candidates.append(path / "aihubmix-openapi")
-    candidates.append(Path.home() / "aihubmix-openapi")
-    unique = []
-    seen = set()
-    for candidate in candidates:
-        try:
-            resolved = candidate.resolve()
-        except OSError:
-            resolved = candidate
-        if str(resolved).lower() not in seen:
-            unique.append(candidate)
-            seen.add(str(resolved).lower())
-    return unique
+def load_openapi() -> dict[str, Any] | None:
+    """Fetch the live OpenAPI spec from the remote endpoint (no local checkout)."""
+    url = os.environ.get("AIHUBMIX_OPENAPI_URL") or OPENAPI_JSON_URL
+    try:
+        return json.loads(read_url_bytes(url).decode("utf-8", errors="replace"))
+    except ValueError:
+        return None
 
 
-def find_openapi_file(repo: str | None = None, filename: str = "openapi.json") -> Path | None:
-    for candidate in repo_candidates(repo):
-        path = candidate / filename
-        if path.exists():
-            return path
-    return None
-
-
-def load_openapi(repo: str | None = None, filename: str = "openapi.json") -> tuple[dict[str, Any] | None, Path | None]:
-    path = find_openapi_file(repo, filename)
-    if not path:
-        return None, None
-    with path.open("r", encoding="utf-8") as handle:
-        return json.load(handle), path
-
-
-def find_gateway_file(repo: str | None = None, filename: str = "errors.yml") -> Path | None:
-    for candidate in repo_candidates(repo):
-        path = candidate / "gateway" / filename
-        if path.exists():
-            return path
-    return None
-
-
-def load_error_contract(repo: str | None = None) -> tuple[dict[str, Any], Path]:
-    path = find_gateway_file(repo, "errors.yml")
-    if not path:
-        raise SystemExit(
-            "Could not find aihubmix-openapi/gateway/errors.yml. Set AIHUBMIX_OPENAPI_REPO or pass --repo."
-        )
-    text = path.read_text(encoding="utf-8")
+def _error_statuses_from_spec(spec: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """Collect declared 4XX/5XX responses (code -> description/schema) from the spec."""
     statuses: dict[str, dict[str, str]] = {}
-    current_status: str | None = None
-    for line in text.splitlines():
-        status_match = re.match(r'\s{4}"?([0-9]{3}|5XX)"?:\s*$', line)
-        if status_match:
-            current_status = status_match.group(1)
-            statuses[current_status] = {}
-            continue
-        if current_status:
-            description_match = re.match(r"\s{6}description:\s*(.+?)\s*$", line)
-            if description_match:
-                statuses[current_status]["description"] = description_match.group(1).strip().strip('"')
+    for _method, _path, operation in iter_operations(spec):
+        for code, response in (operation.get("responses") or {}).items():
+            code = str(code)
+            if code in statuses or not re.match(r"^[45]\d\d$|^[45]XX$", code, re.IGNORECASE):
                 continue
-            ref_match = re.search(r'\$ref:\s*"?([^"}\s]+)', line)
-            if ref_match:
-                statuses[current_status]["schema"] = ref_match.group(1).strip()
+            if not isinstance(response, dict):
+                continue
+            schema_ref = "#/components/schemas/GatewayError"
+            for media in (response.get("content") or {}).values():
+                ref = ((media or {}).get("schema") or {}).get("$ref")
+                if ref:
+                    schema_ref = ref
+                    break
+            statuses[code] = {
+                "description": str(response.get("description", "")).strip(),
+                "schema": schema_ref,
+            }
+    return statuses
 
+
+def load_error_contract() -> dict[str, Any]:
+    """Derive the GatewayError contract from the live OpenAPI spec (no local checkout)."""
+    spec = load_openapi()
+    if not spec:
+        raise SystemExit(
+            f"Could not load the OpenAPI spec from {OPENAPI_JSON_URL} to derive the error contract."
+        )
     return {
-        "source": str(path),
+        "source": display_error_contract_source(),
         "schema_name": "GatewayError",
         "envelope": {
             "top_level": "error",
@@ -940,8 +1086,8 @@ def load_error_contract(repo: str | None = None) -> tuple[dict[str, Any], Path]:
         },
         "request_id": "Use the X-Request-Id response header. It is not in the JSON body.",
         "legacy_upstream": "The legacy upstream field is no longer emitted.",
-        "statuses": statuses,
-    }, path
+        "statuses": _error_statuses_from_spec(spec),
+    }
 
 
 def iter_operations(spec: dict[str, Any]) -> list[tuple[str, str, dict[str, Any]]]:
@@ -958,11 +1104,9 @@ def iter_operations(spec: dict[str, Any]) -> list[tuple[str, str, dict[str, Any]
 
 
 def cmd_protocols(args: argparse.Namespace) -> None:
-    spec, path = load_openapi(args.repo)
+    spec = load_openapi()
     if not spec:
-        raise SystemExit(
-            "Could not find aihubmix-openapi/openapi.json. Set AIHUBMIX_OPENAPI_REPO or pass --repo."
-        )
+        raise SystemExit(f"Could not load the OpenAPI spec from {OPENAPI_JSON_URL}.")
     operations = iter_operations(spec)
     if args.json:
         print(json.dumps({"source": display_openapi_source(), "operations": operations}, ensure_ascii=False, indent=2))
@@ -984,7 +1128,7 @@ def cmd_protocols(args: argparse.Namespace) -> None:
 
 
 def cmd_error_contract(args: argparse.Namespace) -> None:
-    contract, path = load_error_contract(args.repo)
+    contract = load_error_contract()
     if args.json:
         print(json.dumps(contract, ensure_ascii=False, indent=2))
         return
@@ -1085,40 +1229,6 @@ def read_url_bytes(url: str) -> bytes:
         raise SystemExit(f"Could not fetch {url}: {exc.reason}") from exc
 
 
-def sdk_baseline_metadata(version: str = SDK_RECOMMENDED_VERSION) -> dict[str, Any]:
-    return {
-        "source": f"baseline for {SDK_PACKAGE_NAME}@{version}",
-        "package": SDK_PACKAGE_NAME,
-        "version": version,
-        "exports": ["aihubmix", "createAihubmix"],
-        "provider_methods": [
-            "languageModel",
-            "chat",
-            "responses",
-            "completion",
-            "embedding",
-            "embeddingModel",
-            "image",
-            "imageModel",
-            "textEmbedding",
-            "textEmbeddingModel",
-            "transcription",
-            "transcriptionModel",
-            "speech",
-            "speechModel",
-        ],
-        "tools": ["codeInterpreter", "fileSearch", "imageGeneration", "webSearchPreview", "webSearch"],
-        "environment_variable": "AIHUBMIX_API_KEY",
-        "base_urls": ["https://aihubmix.com/v1", "https://aihubmix.com/gemini/v1beta"],
-        "headers": ["Authorization", "APP-Code", "Content-Type", "x-api-key", "x-goog-api-key"],
-        "routing": [
-            "Claude model IDs starting with claude- use Anthropic-compatible messages with x-api-key.",
-            "Gemini or Imagen model IDs use Gemini native base URL unless suffixed with -nothink or -search.",
-            "Other chat models use OpenAI-compatible chat through https://aihubmix.com/v1.",
-        ],
-    }
-
-
 def parse_sdk_package_texts(package_json: dict[str, Any], dts_text: str, js_text: str, source: str) -> dict[str, Any]:
     method_candidates = [
         "languageModel",
@@ -1190,9 +1300,6 @@ def load_sdk_info_from_tarball(tarball: bytes, source_label: str) -> dict[str, A
 
 
 def load_sdk_info(args: argparse.Namespace) -> dict[str, Any]:
-    if args.source == "baseline":
-        return sdk_baseline_metadata(args.version or SDK_RECOMMENDED_VERSION)
-
     if args.package_dir:
         return load_sdk_info_from_directory(Path(args.package_dir).expanduser(), str(Path(args.package_dir).expanduser()))
 
@@ -1348,19 +1455,21 @@ def base_url() -> str:
     return os.environ.get("AIHUBMIX_BASE_URL", DEFAULT_SERVER_URL).rstrip("/")
 
 
+def normalize_protocol(protocol: str) -> str:
+    normalized = PROTOCOL_ALIASES.get(protocol, protocol)
+    if normalized not in PROTOCOL_SPECS:
+        raise ValueError(normalized)
+    return normalized
+
+
 def endpoint_path(protocol: str, model: str) -> str:
-    if protocol == "chat":
-        return "/v1/chat/completions"
-    if protocol == "responses":
-        return "/v1/responses"
-    if protocol == "messages":
-        return "/v1/messages"
-    if protocol == "gemini":
-        return f"/gemini/v1beta/models/{model}:generateContent"
-    raise ValueError(protocol)
+    protocol = normalize_protocol(protocol)
+    path = PROTOCOL_SPECS[protocol]["path"]
+    return path.replace("{model}", model).replace("{video_id}", "video_123")
 
 
 def example_payload(protocol: str, model: str) -> dict[str, Any]:
+    protocol = normalize_protocol(protocol)
     if protocol == "chat":
         return {
             "model": model,
@@ -1376,13 +1485,33 @@ def example_payload(protocol: str, model: str) -> dict[str, Any]:
         }
     if protocol == "gemini":
         return {"contents": [{"role": "user", "parts": [{"text": "Say hello in one short sentence."}]}]}
+    if protocol == "completions":
+        return {"model": model, "prompt": "Say hello in one short sentence.", "max_tokens": 64}
+    if protocol == "embeddings":
+        return {"model": model, "input": "Text to embed with AIHubMix."}
+    if protocol == "images":
+        return {"model": model, "prompt": "A clean product mockup on a white background.", "size": "1024x1024"}
+    if protocol == "videos":
+        return {"model": model, "prompt": "A short cinematic shot of a city at sunrise."}
+    if protocol == "video-remix":
+        return {"model": model, "prompt": "Make the video brighter and more cinematic."}
+    if protocol == "audio-speech":
+        return {"model": model, "input": "Hello from AIHubMix.", "voice": "alloy", "response_format": "mp3"}
+    if protocol in {"audio-transcriptions", "audio-translations"}:
+        return {"model": model, "file": "@/path/to/audio.mp3"}
+    if protocol == "moderations":
+        return {"model": model, "input": "I want to check whether this text is safe."}
+    if protocol in {"video-retrieve", "video-delete", "video-content"}:
+        return {}
     raise ValueError(protocol)
 
 
 def auth_header(protocol: str) -> tuple[str, str]:
-    if protocol == "messages":
+    protocol = normalize_protocol(protocol)
+    family = PROTOCOL_SPECS[protocol]["family"]
+    if family == "anthropic":
         return "x-api-key", "$AIHUBMIX_API_KEY"
-    if protocol == "gemini":
+    if family == "gemini":
         return "x-goog-api-key", "$AIHUBMIX_API_KEY"
     return "Authorization", "Bearer $AIHUBMIX_API_KEY"
 
@@ -1418,6 +1547,52 @@ def powershell_response_printer() -> str:
     )
 
 
+def powershell_response_printer_for(protocol: str) -> str:
+    protocol = normalize_protocol(protocol)
+    if protocol == "embeddings":
+        return (
+            "if ($response.data -and $response.data.Count -gt 0) {\n"
+            "  [Console]::WriteLine(\"embedding dimensions: \" + $response.data[0].embedding.Count)\n"
+            "} else {\n"
+            "  $response | ConvertTo-Json -Depth 20\n"
+            "}\n"
+        )
+    if protocol == "images":
+        return (
+            "if ($response.data -and $response.data.Count -gt 0) {\n"
+            "  $item = $response.data[0]\n"
+            "  if ($item.url) { [Console]::WriteLine($item.url) } elseif ($item.b64_json) { [Console]::WriteLine($item.b64_json) } else { $item | ConvertTo-Json -Depth 20 }\n"
+            "} else {\n"
+            "  $response | ConvertTo-Json -Depth 20\n"
+            "}\n"
+        )
+    if protocol in {"videos", "video-remix", "video-retrieve"}:
+        return (
+            "if ($response.id) {\n"
+            "  [Console]::WriteLine(\"video id: \" + $response.id)\n"
+            "} else {\n"
+            "  $response | ConvertTo-Json -Depth 20\n"
+            "}\n"
+        )
+    if protocol in {"audio-transcriptions", "audio-translations"}:
+        return (
+            "if ($response.text) {\n"
+            "  [Console]::WriteLine($response.text)\n"
+            "} else {\n"
+            "  $response | ConvertTo-Json -Depth 20\n"
+            "}\n"
+        )
+    if protocol == "moderations":
+        return (
+            "if ($response.results -and $response.results.Count -gt 0) {\n"
+            "  $response.results[0] | ConvertTo-Json -Depth 20\n"
+            "} else {\n"
+            "  $response | ConvertTo-Json -Depth 20\n"
+            "}\n"
+        )
+    return powershell_response_printer()
+
+
 def shell_response_parser() -> str:
     return (
         "import json,sys; d=json.load(sys.stdin); "
@@ -1428,19 +1603,140 @@ def shell_response_parser() -> str:
     )
 
 
+def shell_response_parser_for(protocol: str) -> str:
+    protocol = normalize_protocol(protocol)
+    if protocol == "embeddings":
+        return (
+            "import json,sys; d=json.load(sys.stdin); data=d.get('data') or []; "
+            "print('embedding dimensions: ' + str(len((data[0] if data else {}).get('embedding') or [])))"
+        )
+    if protocol == "images":
+        return (
+            "import json,sys; d=json.load(sys.stdin); item=(d.get('data') or [{}])[0]; "
+            "print(item.get('url') or item.get('b64_json') or json.dumps(d, ensure_ascii=False))"
+        )
+    if protocol in {"videos", "video-remix", "video-retrieve"}:
+        return (
+            "import json,sys; d=json.load(sys.stdin); "
+            "print(('video id: ' + str(d.get('id'))) if d.get('id') else json.dumps(d, ensure_ascii=False))"
+        )
+    if protocol in {"audio-transcriptions", "audio-translations"}:
+        return "import json,sys; d=json.load(sys.stdin); print(d.get('text') or json.dumps(d, ensure_ascii=False))"
+    if protocol == "moderations":
+        return (
+            "import json,sys; d=json.load(sys.stdin); "
+            "print(json.dumps((d.get('results') or [d])[0], ensure_ascii=False))"
+        )
+    return shell_response_parser()
+
+
 def render_cmd_example(protocol: str, model: str, os_name: str) -> str:
+    protocol = normalize_protocol(protocol)
     url = base_url() + endpoint_path(protocol, model)
     payload = example_payload(protocol, model)
+    spec = PROTOCOL_SPECS[protocol]
+    method = spec["method"]
+    is_get_or_delete = method in {"GET", "DELETE"}
+    is_multipart = bool(spec.get("multipart"))
+    is_binary = bool(spec.get("binary_response") or protocol == "video-content")
+    needs_video_id = bool(spec.get("needs_video_id"))
     body = json.dumps(payload, ensure_ascii=False, indent=2)
     header_name, _ = auth_header(protocol)
 
     if os_name == "windows":
-        if protocol == "messages":
+        if spec["family"] == "anthropic":
             auth_line = '"x-api-key" = $AIHUBMIX_API_KEY'
-        elif protocol == "gemini":
+        elif spec["family"] == "gemini":
             auth_line = '"x-goog-api-key" = $AIHUBMIX_API_KEY'
         else:
             auth_line = '"Authorization" = "Bearer $AIHUBMIX_API_KEY"'
+        if is_get_or_delete:
+            if is_binary:
+                return (
+                    "$OutputEncoding = [System.Text.Encoding]::UTF8\n"
+                    "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n"
+                    "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12\n"
+                    "$AIHUBMIX_API_KEY = Read-Host \"Paste AIHubMix API Key\"\n"
+                    "$videoId = Read-Host \"Paste video id\"\n"
+                    f"$url = {powershell_literal(url)}.Replace('video_123', $videoId)\n\n"
+                    "Invoke-WebRequest `\n"
+                    "  -Uri $url `\n"
+                    "  -Method Get `\n"
+                    f"  -Headers @{{ {auth_line} }} `\n"
+                    "  -OutFile 'aihubmix-video.mp4'\n\n"
+                    "[Console]::WriteLine('Saved to aihubmix-video.mp4')"
+                )
+            return (
+                "$OutputEncoding = [System.Text.Encoding]::UTF8\n"
+                "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n"
+                "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12\n"
+                "$AIHUBMIX_API_KEY = Read-Host \"Paste AIHubMix API Key\"\n"
+                "$videoId = Read-Host \"Paste video id\"\n"
+                f"$url = {powershell_literal(url)}.Replace('video_123', $videoId)\n\n"
+                "$response = Invoke-RestMethod `\n"
+                "  -Uri $url `\n"
+                f"  -Method {method.title()} `\n"
+                f"  -Headers @{{ {auth_line}; \"Accept\" = \"application/json\" }}\n\n"
+                f"{powershell_response_printer_for(protocol)}"
+            )
+        if is_multipart:
+            return (
+                "$OutputEncoding = [System.Text.Encoding]::UTF8\n"
+                "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n"
+                "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12\n"
+                "$AIHUBMIX_API_KEY = Read-Host \"Paste AIHubMix API Key\"\n"
+                "$audioPath = Read-Host \"Paste local audio file path\"\n\n"
+                "$form = @{\n"
+                f"  model = {powershell_literal(model)}\n"
+                "  file = Get-Item -LiteralPath $audioPath\n"
+                "}\n\n"
+                "$response = Invoke-RestMethod `\n"
+                f"  -Uri {powershell_literal(url)} `\n"
+                "  -Method Post `\n"
+                f"  -Headers @{{ {auth_line}; \"Accept\" = \"application/json\" }} `\n"
+                "  -Form $form\n\n"
+                f"{powershell_response_printer_for(protocol)}"
+            )
+        if needs_video_id:
+            return (
+                "$OutputEncoding = [System.Text.Encoding]::UTF8\n"
+                "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n"
+                "[Console]::InputEncoding = [System.Text.Encoding]::UTF8\n"
+                "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12\n"
+                "$AIHUBMIX_API_KEY = Read-Host \"Paste AIHubMix API Key\"\n"
+                "$videoId = Read-Host \"Paste video id\"\n"
+                f"$url = {powershell_literal(url)}.Replace('video_123', $videoId)\n\n"
+                "$body = @'\n"
+                f"{body}\n"
+                "'@\n\n"
+                "$response = Invoke-RestMethod `\n"
+                "  -Uri $url `\n"
+                f"  -Method {method.title()} `\n"
+                f"  -Headers @{{ {auth_line}; \"Accept\" = \"application/json\" }} `\n"
+                "  -ContentType \"application/json\" `\n"
+                "  -Body $body\n\n"
+                f"{powershell_response_printer_for(protocol)}\n"
+                "# To inspect the full response, uncomment the next line:\n"
+                "# $response | ConvertTo-Json -Depth 20"
+            )
+        if is_binary:
+            return (
+                "$OutputEncoding = [System.Text.Encoding]::UTF8\n"
+                "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n"
+                "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12\n"
+                "$AIHUBMIX_API_KEY = Read-Host \"Paste AIHubMix API Key\"\n\n"
+                "$body = @'\n"
+                f"{body}\n"
+                "'@\n\n"
+                "Invoke-WebRequest `\n"
+                f"  -Uri {powershell_literal(url)} `\n"
+                "  -Method Post `\n"
+                f"  -Headers @{{ {auth_line} }} `\n"
+                "  -ContentType \"application/json\" `\n"
+                "  -Body $body `\n"
+                "  -OutFile 'aihubmix-output.mp3'\n\n"
+                "[Console]::WriteLine('Saved to aihubmix-output.mp3')"
+            )
         return (
             "$OutputEncoding = [System.Text.Encoding]::UTF8\n"
             "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n"
@@ -1456,17 +1752,85 @@ def render_cmd_example(protocol: str, model: str, os_name: str) -> str:
             f"  -Headers @{{ {auth_line}; \"Accept\" = \"application/json\" }} `\n"
             "  -ContentType \"application/json\" `\n"
             "  -Body $body\n\n"
-            f"{powershell_response_printer()}\n"
+            f"{powershell_response_printer_for(protocol)}\n"
             "# To inspect the full response, uncomment the next line:\n"
             "# $response | ConvertTo-Json -Depth 20"
         )
 
-    if protocol == "messages":
+    if spec["family"] == "anthropic":
         auth_arg = '-H "x-api-key: $AIHUBMIX_API_KEY"'
-    elif protocol == "gemini":
+    elif spec["family"] == "gemini":
         auth_arg = '-H "x-goog-api-key: $AIHUBMIX_API_KEY"'
     else:
         auth_arg = '-H "Authorization: Bearer $AIHUBMIX_API_KEY"'
+    if is_get_or_delete:
+        if is_binary:
+            return textwrap.dedent(
+                f"""\
+                read -rsp "Paste AIHubMix API Key: " AIHUBMIX_API_KEY; echo
+                read -rp "Paste video id: " video_id
+
+                curl -L -s {json.dumps(url)} \\
+                  {auth_arg} \\
+                  -o aihubmix-video.mp4
+
+                echo "Saved to aihubmix-video.mp4"
+                """
+            ).strip().replace("video_123", "${video_id}")
+        return textwrap.dedent(
+            f"""\
+            read -rsp "Paste AIHubMix API Key: " AIHUBMIX_API_KEY; echo
+            read -rp "Paste video id: " video_id
+
+            curl -s -X {method} {json.dumps(url)} \\
+              {auth_arg} \\
+              -H "Accept: application/json" \\
+              | python3 -c {json.dumps(shell_response_parser_for(protocol))}
+            """
+        ).strip().replace("video_123", "${video_id}")
+    if is_multipart:
+        return textwrap.dedent(
+            f"""\
+            read -rsp "Paste AIHubMix API Key: " AIHUBMIX_API_KEY; echo
+            read -rp "Paste local audio file path: " audio_path
+
+            curl -s {json.dumps(url)} \\
+              {auth_arg} \\
+              -H "Accept: application/json" \\
+              -F model={json.dumps(model)} \\
+              -F file=@"$audio_path" \\
+              | python3 -c {json.dumps(shell_response_parser_for(protocol))}
+            """
+        ).strip()
+    if needs_video_id:
+        compact_payload_video = json.dumps(payload, ensure_ascii=False)
+        return textwrap.dedent(
+            f"""\
+            read -rsp "Paste AIHubMix API Key: " AIHUBMIX_API_KEY; echo
+            read -rp "Paste video id: " video_id
+
+            curl -s -X {method} {json.dumps(url)} \\
+              {auth_arg} \\
+              -H "Content-Type: application/json" \\
+              -d {json.dumps(compact_payload_video)} \\
+              | python3 -c {json.dumps(shell_response_parser_for(protocol))}
+            """
+        ).strip().replace("video_123", "${video_id}")
+    if is_binary:
+        compact_payload_binary = json.dumps(payload, ensure_ascii=False)
+        return textwrap.dedent(
+            f"""\
+            read -rsp "Paste AIHubMix API Key: " AIHUBMIX_API_KEY; echo
+
+            curl -L -s {json.dumps(url)} \\
+              {auth_arg} \\
+              -H "Content-Type: application/json" \\
+              -d {json.dumps(compact_payload_binary)} \\
+              -o aihubmix-output.mp3
+
+            echo "Saved to aihubmix-output.mp3"
+            """
+        ).strip()
     compact_payload = json.dumps(payload, ensure_ascii=False)
     return textwrap.dedent(
         f"""\
@@ -1476,12 +1840,13 @@ def render_cmd_example(protocol: str, model: str, os_name: str) -> str:
           {auth_arg} \\
           -H "Content-Type: application/json" \\
           -d {json.dumps(compact_payload)} \\
-          | python3 -c {json.dumps(shell_response_parser())}
+          | python3 -c {json.dumps(shell_response_parser_for(protocol))}
         """
     ).strip()
 
 
 def render_js_example(protocol: str, model: str) -> str:
+    protocol = normalize_protocol(protocol)
     if protocol == "chat":
         return textwrap.dedent(
             f"""\
@@ -1499,12 +1864,127 @@ def render_js_example(protocol: str, model: str) -> str:
 
     payload = example_payload(protocol, model)
     path = endpoint_path(protocol, model)
+    spec = PROTOCOL_SPECS[protocol]
     header_name, header_value = auth_header(protocol)
     header_value_js = (
         "process.env.AIHUBMIX_API_KEY"
-        if protocol in {"messages", "gemini"}
+        if spec["family"] in {"anthropic", "gemini"}
         else '`Bearer ${process.env.AIHUBMIX_API_KEY}`'
     )
+    payload_js = json.dumps(payload, ensure_ascii=False, indent=2)
+    payload_body_lines = ["  body: JSON.stringify(" + payload_js.splitlines()[0]]
+    payload_body_lines.extend("  " + line for line in payload_js.splitlines()[1:])
+    payload_body_lines[-1] = payload_body_lines[-1] + "),"
+    if spec.get("multipart"):
+        return textwrap.dedent(
+            f"""\
+            import {{ createReadStream }} from "node:fs";
+
+            const form = new FormData();
+            form.set("model", {json.dumps(model)});
+            form.set("file", createReadStream(process.env.AUDIO_FILE ?? "./audio.mp3"));
+
+            const response = await fetch("{base_url()}{path}", {{
+              method: "POST",
+              headers: {{
+                {json.dumps(header_name)}: {header_value_js},
+              }},
+              body: form,
+            }});
+
+            if (!response.ok) {{
+              throw new Error(`${{response.status}} ${{await response.text()}}`);
+            }}
+
+            const data = await response.json();
+            console.log(data.text ?? JSON.stringify(data, null, 2));
+            """
+        ).strip()
+    if spec.get("binary_response"):
+        return "\n".join(
+            [
+                'import { writeFile } from "node:fs/promises";',
+                "",
+                f'const response = await fetch("{base_url()}{path}", {{',
+                '  method: "POST",',
+                "  headers: {",
+                f"    {json.dumps(header_name)}: {header_value_js},",
+                '    "Content-Type": "application/json",',
+                "  },",
+                *payload_body_lines,
+                "});",
+                "",
+                "if (!response.ok) {",
+                "  throw new Error(`${response.status} ${await response.text()}`);",
+                "}",
+                "",
+                'await writeFile("aihubmix-output.mp3", Buffer.from(await response.arrayBuffer()));',
+                'console.log("Saved to aihubmix-output.mp3");',
+            ]
+        )
+    if protocol == "video-content":
+        return textwrap.dedent(
+            f"""\
+            import {{ writeFile }} from "node:fs/promises";
+
+            const videoId = process.env.AIHUBMIX_VIDEO_ID ?? "video_123";
+            const response = await fetch("{base_url()}{path}".replace("video_123", videoId), {{
+              method: "GET",
+              headers: {{
+                {json.dumps(header_name)}: {header_value_js},
+              }},
+            }});
+
+            if (!response.ok) {{
+              throw new Error(`${{response.status}} ${{await response.text()}}`);
+            }}
+
+            await writeFile("aihubmix-video.mp4", Buffer.from(await response.arrayBuffer()));
+            console.log("Saved to aihubmix-video.mp4");
+            """
+        ).strip()
+    if spec["method"] in {"GET", "DELETE"}:
+        return textwrap.dedent(
+            f"""\
+            const videoId = process.env.AIHUBMIX_VIDEO_ID ?? "video_123";
+            const response = await fetch("{base_url()}{path}".replace("video_123", videoId), {{
+              method: {json.dumps(spec["method"])},
+              headers: {{
+                {json.dumps(header_name)}: {header_value_js},
+                "Accept": "application/json",
+              }},
+            }});
+
+            if (!response.ok) {{
+              throw new Error(`${{response.status}} ${{await response.text()}}`);
+            }}
+
+            const data = await response.json();
+            console.log(data.id ? `video id: ${{data.id}}` : JSON.stringify(data, null, 2));
+            """
+        ).strip()
+    if spec.get("needs_video_id"):
+        path_expr = f'"{base_url()}{path}".replace("video_123", videoId)'
+        return "\n".join(
+            [
+                'const videoId = process.env.AIHUBMIX_VIDEO_ID ?? "video_123";',
+                f"const response = await fetch({path_expr}, {{",
+                f'  method: {json.dumps(spec["method"])},',
+                "  headers: {",
+                f"    {json.dumps(header_name)}: {header_value_js},",
+                '    "Content-Type": "application/json",',
+                "  },",
+                *payload_body_lines,
+                "});",
+                "",
+                "if (!response.ok) {",
+                "  throw new Error(`${response.status} ${await response.text()}`);",
+                "}",
+                "",
+                "const data = await response.json();",
+                "console.log(data.id ? `video id: ${data.id}` : JSON.stringify(data, null, 2));",
+            ]
+        )
     payload_json = json.dumps(payload, ensure_ascii=False, indent=2)
     payload_lines = ["  body: JSON.stringify(" + payload_json.splitlines()[0]]
     payload_lines.extend("  " + line for line in payload_json.splitlines()[1:])
@@ -1512,7 +1992,7 @@ def render_js_example(protocol: str, model: str) -> str:
     return "\n".join(
         [
             f'const response = await fetch("{base_url()}{path}", {{',
-            '  method: "POST",',
+            f'  method: {json.dumps(spec["method"])},',
             "  headers: {",
             f"    {json.dumps(header_name)}: {header_value_js},",
             '    "Content-Type": "application/json",',
@@ -1529,7 +2009,11 @@ def render_js_example(protocol: str, model: str) -> str:
             "  data.output_text ??",
             "  data.choices?.[0]?.message?.content ??",
             "  data.content?.[0]?.text ??",
-            "  data.candidates?.[0]?.content?.parts?.[0]?.text;",
+            "  data.candidates?.[0]?.content?.parts?.[0]?.text ??",
+            "  data.data?.[0]?.url ??",
+            "  data.data?.[0]?.b64_json ??",
+            "  data.text ??",
+            "  (data.id ? `video id: ${data.id}` : undefined);",
             "",
             "console.log(text ?? JSON.stringify(data, null, 2));",
         ]
@@ -1573,27 +2057,28 @@ def cmd_example(args: argparse.Namespace) -> None:
         return
 
     if args.lang == "python":
-        print(
-            textwrap.dedent(
-                f"""\
-                import os
-                from openai import OpenAI
+        if normalize_protocol(protocol) == "chat":
+            print(
+                textwrap.dedent(
+                    f"""\
+                    import os
+                    from openai import OpenAI
 
-                client = OpenAI(
-                    api_key=os.environ["AIHUBMIX_API_KEY"],
-                    base_url="{base_url()}/v1",
-                )
+                    client = OpenAI(
+                        api_key=os.environ["AIHUBMIX_API_KEY"],
+                        base_url="{base_url()}/v1",
+                    )
 
-                response = client.chat.completions.create(
-                    model={model!r},
-                    messages=[{{"role": "user", "content": "Say hello in one short sentence."}}],
-                )
-                print(response.choices[0].message.content)
-                """
-            ).strip()
-        )
-        if protocol != "chat":
-            print("\n# Note: Python OpenAI SDK sample is for the OpenAI-shaped chat endpoint.")
+                    response = client.chat.completions.create(
+                        model={model!r},
+                        messages=[{{"role": "user", "content": "Say hello in one short sentence."}}],
+                    )
+                    print(response.choices[0].message.content)
+                    """
+                ).strip()
+            )
+        else:
+            print("# Use the command-line or JavaScript example for this endpoint shape.")
         return
 
     if args.lang == "js":
@@ -1638,8 +2123,8 @@ def cmd_troubleshoot(args: argparse.Namespace) -> None:
         ],
     )
 
-    if args.repo:
-        contract, path = load_error_contract(args.repo)
+    if args.contract:
+        contract = load_error_contract()
         status_key = "5XX" if args.status and args.status >= 500 else str(args.status or "")
         status_contract = contract["statuses"].get(status_key, {})
         is_gateway_shape = isinstance(error, dict) and bool(message)
@@ -1700,8 +2185,530 @@ def cmd_troubleshoot(args: argparse.Namespace) -> None:
         print(f"{index}. {item}")
 
 
+# --- Preflight (doctor) + image-input candidates --------------------------
+
+
+def _openai_base(explicit: str | None = None) -> str:
+    """OpenAI-compatible base URL, tolerant of a trailing /v1 already present."""
+    raw = (explicit or os.environ.get("AIHUBMIX_BASE_URL") or DEFAULT_SERVER_URL).rstrip("/")
+    return raw if raw.endswith("/v1") else raw + "/v1"
+
+
+def _http_request(
+    url: str,
+    method: str = "GET",
+    headers: dict[str, str] | None = None,
+    body: dict[str, Any] | None = None,
+    timeout: float = 30,
+) -> tuple[int | None, str]:
+    """Minimal JSON HTTP call. Returns (status, text); status is None on network error."""
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    request = urllib.request.Request(url, data=data, method=method, headers=headers or {})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            status = getattr(response, "status", None) or response.getcode()
+            return status, response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode("utf-8", errors="replace")
+    except urllib.error.URLError as exc:
+        return None, f"URLError: {exc.reason}"
+    except (TimeoutError, OSError) as exc:
+        return None, f"network error: {exc}"
+
+
+def _mask_secret(secret: str) -> str:
+    secret = (secret or "").strip()
+    if not secret:
+        return "(none)"
+    if len(secret) <= 12:
+        return secret[:2] + "…" + secret[-2:]
+    return secret[:5] + "…" + secret[-4:]
+
+
+def _redact(text: str, *secrets: str) -> str:
+    """Scrub keys from upstream text (AIHubMix echoes the key in invalid-key errors)."""
+    out = text or ""
+    for secret in secrets:
+        secret = (secret or "").strip()
+        if len(secret) >= 6:
+            out = out.replace(secret, "[REDACTED]")
+            if secret.lower().startswith("sk-"):
+                out = out.replace(secret[3:], "[REDACTED]")
+    return re.sub(r"sk-[A-Za-z0-9]{6,}", "[REDACTED]", out)
+
+
+def _extract_chat_reply(body: str) -> str | None:
+    try:
+        data = json.loads(body)
+        content = data["choices"][0]["message"]["content"]
+    except (ValueError, KeyError, IndexError, TypeError):
+        return None
+    if isinstance(content, list):
+        return " ".join(part.get("text", "") for part in content if isinstance(part, dict)).strip()
+    return str(content).strip()
+
+
+def _looks_like_auth_error(body: str) -> bool:
+    low = (body or "").lower()
+    return any(
+        token in low
+        for token in (
+            "invalid key", "invalid api key", "incorrect api key", "unauthorized",
+            "authentication", "no permission", "无效", "鉴权", "未授权", "令牌",
+        )
+    )
+
+
+def _looks_like_balance_error(body: str) -> bool:
+    low = (body or "").lower()
+    return any(
+        token in low
+        for token in (
+            "insufficient balance", "insufficient_quota", "insufficient funds", "no balance",
+            "balance is not enough", "arrearage", "余额不足", "余额已用", "欠费", "额度不足",
+        )
+    )
+
+
+def _solid_png_data_url(rgb: tuple[int, int, int] = (20, 90, 210), size: int = 64) -> str:
+    """Build a tiny solid-color PNG data URL (stdlib only) for probing image input."""
+    import base64
+    import struct
+    import zlib
+
+    def chunk(tag: bytes, payload: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(payload))
+            + tag
+            + payload
+            + struct.pack(">I", zlib.crc32(tag + payload) & 0xFFFFFFFF)
+        )
+
+    signature = b"\x89PNG\r\n\x1a\n"
+    ihdr = struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0)  # 8-bit RGB
+    raw = b"".join(b"\x00" + bytes(rgb) * size for _ in range(size))
+    png = signature + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
+    return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    key = (args.key or os.environ.get("AIHUBMIX_API_KEY") or "").strip()
+    base = _openai_base(args.base_url)
+    timeout = args.timeout
+
+    print(_t("AIHubMix preflight (doctor)", "AIHubMix 预检 (doctor)"))
+    print(f"base_url: {base}")
+    print(f"key: {_mask_secret(key)}\n")
+
+    if not key:
+        print(_t("[✗] KEY    missing — set AIHUBMIX_API_KEY or pass --key <key>",
+                 "[✗] KEY    未提供 — 设置环境变量 AIHUBMIX_API_KEY 或传 --key <key>"))
+        print(_t("\nResult: FAIL. No API key available.", "\n结论: 失败。没有可用的 API key。"))
+        return 1
+    print(_t("[✓] KEY    provided", "[✓] KEY    已提供"))
+
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "aihubmix-api-skill/0.1",
+    }
+
+    # The public /v1/models list does NOT require auth, so it cannot validate a
+    # key. Only a real chat call can — use a tiny one as the auth + text probe.
+    probe_model = args.model or "gpt-4o-mini"
+    payload = {"model": probe_model, "messages": [{"role": "user", "content": "ping"}], "max_tokens": 8, "temperature": 0}
+    status, body = _http_request(f"{base}/chat/completions", method="POST", headers=headers, body=payload, timeout=timeout)
+    reply = _extract_chat_reply(body) if status == 200 else None
+    if reply is not None:
+        note = "" if args.model else _t(" (probe model gpt-4o-mini)", "（探测模型 gpt-4o-mini）")
+        print(_t(f"[✓] AUTH   key valid, {probe_model} call OK{note} → {reply[:60]!r}",
+                 f"[✓] AUTH   key 有效，{probe_model} 调用成功{note} → {reply[:60]!r}"))
+    elif status == 402 or _looks_like_balance_error(body):
+        print(_t(f"[✗] BILLING key valid but insufficient balance/quota — HTTP {status}: {_redact(body, key)[:300]}",
+                 f"[✗] 余额   key 有效但余额/额度不足 — HTTP {status}: {_redact(body, key)[:300]}"))
+        print(_t("\nResult: FAIL (billing). The key works; the account needs a top-up.",
+                 "\n结论: 失败（计费）。key 本身可用，但账户需要充值。"))
+        return 1
+    elif status in (401, 403) or _looks_like_auth_error(body):
+        print(_t(f"[✗] AUTH   invalid key / no permission — HTTP {status}: {_redact(body, key)[:300]}",
+                 f"[✗] AUTH   key 无效/无权限 — HTTP {status}: {_redact(body, key)[:300]}"))
+        print(_t("\nResult: FAIL. Check the key is correct, enabled, and funded.",
+                 "\n结论: 失败。请检查 key 是否正确、已启用、有余额。"))
+        return 1
+    else:
+        info = f"HTTP {status}" if status else _t("network unreachable", "网络不可达")
+        print(_t(f"[⚠] AUTH   unconfirmed — probing with {probe_model} returned {info}: {_redact(body, key)[:200]}",
+                 f"[⚠] AUTH   未能确认 — 用 {probe_model} 探测返回 {info}: {_redact(body, key)[:200]}"))
+        print(_t("           Usually the model is not available to your key (key likely fine); retry with --model <a model you can access>.",
+                 "           多半是该模型对你的 key 不可用，而非 key 失效；用 --model <你有权限的模型> 重测。"))
+        print(_t("\nResult: NOT PASSED (could not confirm key). Retry with --model <available model>.",
+                 "\n结论: 未通过（无法确认 key）。建议用 --model 指定可用模型重测。"))
+        return 1
+
+    overall_ok = True
+
+    if args.image:
+        if not args.model:
+            print(_t("[–] IMAGE  skipped (image probe needs --model <id>; you/the LLM pick which vision model)",
+                     "[–] IMAGE  跳过（图片实测需要 --model <id>；该测哪个视觉模型由你/LLM 决定）"))
+        else:
+            payload = {
+                "model": args.model,
+                "max_tokens": 16,
+                "temperature": 0,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "What is the dominant color of this image? Answer with one word."},
+                            {"type": "image_url", "image_url": {"url": _solid_png_data_url()}},
+                        ],
+                    }
+                ],
+            }
+            status, body = _http_request(f"{base}/chat/completions", method="POST", headers=headers, body=payload, timeout=timeout)
+            reply = _extract_chat_reply(body) if status == 200 else None
+            if reply is not None:
+                print(_t(f"[✓] IMAGE  {args.model} accepts image input → {reply[:60]!r}",
+                         f"[✓] IMAGE  {args.model} 接受图片输入 → {reply[:60]!r}"))
+            else:
+                overall_ok = False
+                print(_t(f"[✗] IMAGE  {args.model} no image support or call failed — HTTP {status}: {_redact(body, key)[:300]}",
+                         f"[✗] IMAGE  {args.model} 不支持图片或调用失败 — HTTP {status}: {_redact(body, key)[:300]}"))
+
+    print()
+    if overall_ok:
+        tail = (
+            _t("Tested capabilities all OK.", "已实测的能力均正常。")
+            if args.model
+            else _t("Key valid; add --model <id> (and --image) to test a specific model.",
+                    "key 有效；加 --model <id>（可再加 --image）可实测具体模型。")
+        )
+        print(_t(f"Result: PASS. {tail}", f"结论: 通过。{tail}"))
+        return 0
+    print(_t("Result: some checks did not pass — see the [✗] items above.",
+             "结论: 部分检查未通过，见上面的 [✗] 项。"))
+    return 1
+
+
+# Categories that cannot accept chat input, dropped from input-modality
+# candidate ranges (e.g. vision) even when the noisy modality field tags them.
+_NON_CHAT_RE = re.compile(
+    r"(embed|rerank|\bbge\b|\bbce\b|\bgte\b|\bm3e\b|jina|moderation|"
+    r"whisper|\btts\b|text-to-speech|speech|transcrib|"
+    r"flux|stable-diffusion|\bsdxl\b|dall-?e|midjourney|imagen|gpt-image|qwen-image|"
+    r"seedream|seededit|kolors|cogview|ideogram|recraft|hunyuan-image|"
+    r"\bveo\b|sora|kling|runway|video|hailuo|seedance|vidu)",
+    re.IGNORECASE,
+)
+
+
+def _is_non_chat(model: dict[str, Any]) -> bool:
+    """Drop models that cannot accept chat input (embeddings, generation, audio, video)."""
+    if suggested_protocol(model) in {
+        "embeddings", "images", "videos", "moderations",
+        "audio-speech", "audio-transcriptions", "audio-translations",
+    }:
+        return True
+    return bool(_NON_CHAT_RE.search(f"{model_id(model)} {model_label(model)}"))
+
+
+# Capability discovery is deliberately broad + heuristic. Each spec scores a
+# model by up to three signals and the caller/LLM picks from the range:
+#   protocol: suggested_protocol(model) lands in the capability's endpoint set
+#   modality: the model's metadata text contains a capability keyword
+#   family:   the model id/name matches a known family regex
+# protocol/family are treated as reliable; modality-only is noisy. The tool
+# never picks a default and never asserts a hard capability fact.
+CAPABILITY_SPECS: dict[str, dict[str, Any]] = {
+    "vision": {
+        "label": "图片输入 / 看图（chat 模型接受图片）",
+        "aliases": ["image-input", "multimodal", "mm", "vlm", "看图", "图片输入", "多模态"],
+        "protocols": None,
+        "modality_tokens": ["image", "vision", "multimodal", "visual"],
+        "require_chat": True,
+        "family": (
+            r"gpt-4o|gpt-4\.1|gpt-4-vision|gpt-4-turbo|gpt-5|chatgpt-4o|o1|o3|o4-mini|"
+            r"gemini|claude-3|claude-4|claude-sonnet|claude-opus|claude-haiku|"
+            r"qwen[\w.-]*vl|qwen-vl|glm-4v|glm-[\d.]+v|cogvlm|cogagent|yi-vision|yi-vl|"
+            r"step-1v|step-1o|step-3|internvl|llava|pixtral|moondream|"
+            r"llama[\w.-]*vision|grok[\w.-]*vision|grok-2-vision|grok-4|"
+            r"doubao[\w.-]*vision|ernie[\w.-]*vl|minicpm-v|nova-lite|nova-pro|"
+            r"phi-3[\w.-]*vision|phi-4[\w.-]*multimodal|kimi[\w.-]*vl|kimi-latest|moonshot[\w.-]*vl|"
+            r"mistral-small-3|molmo|deepseek-vl"
+        ),
+    },
+    "image-gen": {
+        "label": "图像生成 / 文生图（text-to-image）",
+        "aliases": ["t2i", "image-generation", "imagegen", "生图", "文生图", "画图"],
+        "protocols": {"images"},
+        "modality_tokens": ["image_generation", "text-to-image"],
+        "require_chat": False,
+        "family": (
+            r"flux|kontext|stable-diffusion|\bsd3\b|\bsdxl\b|dall-?e|midjourney|\bmj\b|"
+            r"imagen|gpt-image|qwen-image|hunyuan-image|hidream|seedream|seededit|kolors|"
+            r"cogview|ideogram|recraft|wanx|gemini[\w.-]*image|nano-banana|grok[\w.-]*image|playground-v"
+        ),
+    },
+    "video": {
+        "label": "视频生成（text/image-to-video）",
+        "aliases": ["t2v", "video-generation", "生视频", "文生视频", "视频"],
+        "protocols": {"videos"},
+        "modality_tokens": ["video"],
+        "require_chat": False,
+        "family": (
+            r"veo|sora|kling|runway|gen-?3|hailuo|minimax[\w.-]*video|seedance|vidu|"
+            r"wan[\w.-]*|cogvideo|pika|luma|dream-machine|ray-?2|pixverse|mochi|\bltx\b"
+        ),
+    },
+    "audio-tts": {
+        "label": "语音合成（文字转语音 TTS）",
+        "aliases": ["tts", "text-to-speech", "speech", "语音合成"],
+        "protocols": {"audio-speech"},
+        "modality_tokens": ["speech", "text-to-speech", "tts"],
+        "require_chat": False,
+        "family": (
+            r"\btts\b|text-to-speech|speech-0|cosyvoice|fish[\w.-]*audio|elevenlabs|"
+            r"gpt-4o[\w.-]*tts|qwen[\w.-]*tts|doubao[\w.-]*tts|minimax[\w.-]*speech|index-tts"
+        ),
+    },
+    "audio-stt": {
+        "label": "语音识别 / 转写（STT/ASR）",
+        "aliases": ["stt", "asr", "transcription", "whisper", "语音识别", "转写"],
+        "protocols": {"audio-transcriptions", "audio-translations"},
+        "modality_tokens": ["transcription", "translation"],
+        "require_chat": False,
+        "family": (
+            r"whisper|transcrib|gpt-4o[\w.-]*transcribe|qwen[\w.-]*audio|sensevoice|paraformer|fun-?asr"
+        ),
+    },
+    "embedding": {
+        "label": "向量嵌入（embedding）",
+        "aliases": ["embed", "embeddings", "向量", "嵌入"],
+        "protocols": {"embeddings"},
+        "modality_tokens": ["embedding"],
+        "require_chat": False,
+        "exclude": r"rerank",
+        "family": (
+            r"embed|text-embedding|\bbge\b|bge-[\w.-]+|\bbce\b|\bgte\b|\bm3e\b|jina[\w.-]*embed|"
+            r"nomic[\w.-]*embed|qwen[\w.-]*embedding|conan-embedding|doubao[\w.-]*embedding|\bgme\b"
+        ),
+    },
+    "rerank": {
+        "label": "重排（rerank）",
+        "aliases": ["reranker", "重排"],
+        "protocols": None,
+        "modality_tokens": ["rerank"],
+        "require_chat": False,
+        "family": r"rerank|reranker|bge[\w.-]*rerank|bce[\w.-]*rerank|jina[\w.-]*rerank|qwen3?-?rerank",
+    },
+}
+
+for _spec in CAPABILITY_SPECS.values():
+    _spec["_family_re"] = re.compile(_spec["family"], re.IGNORECASE)
+    _spec["_exclude_re"] = re.compile(_spec["exclude"], re.IGNORECASE) if _spec.get("exclude") else None
+
+
+def resolve_capability(name: str | None) -> str:
+    key = (name or "vision").strip().lower()
+    if key in CAPABILITY_SPECS:
+        return key
+    for cap, spec in CAPABILITY_SPECS.items():
+        if key in [alias.lower() for alias in spec["aliases"]]:
+            return cap
+    raise SystemExit(f"未知能力: {name}。可选: {', '.join(CAPABILITY_SPECS)}")
+
+
+def _capability_signals(model: dict[str, Any], spec: dict[str, Any]) -> list[str]:
+    signals: list[str] = []
+    if spec["protocols"] and suggested_protocol(model) in spec["protocols"]:
+        signals.append("protocol")
+    cap_text = " ".join(
+        compact(model.get(key))
+        for key in ("features", "capabilities", "input_modalities", "modality", "modalities", "types", "type", "endpoints")
+        if model.get(key) is not None
+    ).lower()
+    if any(token in cap_text for token in spec["modality_tokens"]):
+        signals.append("modality")
+    if spec["_family_re"].search(f"{model_id(model)} {model_label(model)}"):
+        signals.append("family")
+    return signals
+
+
+# --- Companion aihubmix CLI helpers (account data; opt-in only) -------------
+
+
+def _find_aihubmix() -> str | None:
+    """Locate the companion aihubmix CLI on PATH or known install locations."""
+    found = shutil.which(CLI_BIN)
+    if found:
+        return found
+    candidates: list[Path] = []
+    local = os.environ.get("LOCALAPPDATA")
+    if local:
+        candidates.append(Path(local) / "aihubmix" / "bin" / "aihubmix.exe")
+    home = Path.home()
+    candidates += [home / ".local" / "bin" / CLI_BIN, Path("/usr/local/bin") / CLI_BIN]
+    for candidate in candidates:
+        try:
+            if candidate.is_file():
+                return str(candidate)
+        except OSError:
+            continue
+    return None
+
+
+def _install_aihubmix() -> bool:
+    """Run the official per-OS installer (explicit / opt-in only). Returns success."""
+    if platform.system().lower().startswith("win"):
+        cmd = ["powershell", "-NoProfile", "-Command", f"irm {CLI_INSTALL_PS1} | iex"]
+    else:
+        cmd = ["sh", "-c", f"curl -fsSL {CLI_INSTALL_SH} | sh"]
+    try:
+        return subprocess.run(cmd, timeout=300).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def cmd_install_cli(args: argparse.Namespace) -> int:
+    existing = _find_aihubmix()
+    if existing and not args.force:
+        print(_t(f"aihubmix CLI already installed: {existing}", f"aihubmix CLI 已安装：{existing}"))
+        print(_t(f"Project: {CLI_REPO_URL}", f"项目主页：{CLI_REPO_URL}"))
+        return 0
+    print(_t(f"Installing the aihubmix CLI (project: {CLI_REPO_URL}) ...",
+             f"正在安装 aihubmix CLI（项目主页：{CLI_REPO_URL}）..."))
+    if _install_aihubmix() and _find_aihubmix():
+        print(_t("Done. Next: run `aihubmix login` to authenticate.",
+                 "完成。下一步：运行 `aihubmix login` 登录。"))
+        return 0
+    print(_t(f"Install failed. Install manually — see {CLI_REPO_URL}",
+             f"安装失败。请手动安装，见 {CLI_REPO_URL}"))
+    return 1
+
+
+def _my_callable_models(auto_install: bool = False) -> set[str]:
+    """Lowercased ids the user's token can actually call (`aihubmix models list -j`)."""
+    exe = _find_aihubmix()
+    if not exe and auto_install:
+        print(_t("aihubmix CLI not found; installing (--auto-install) ...",
+                 "未找到 aihubmix CLI，正在自动安装（--auto-install）..."), file=sys.stderr)
+        if _install_aihubmix():
+            exe = _find_aihubmix()
+    if not exe:
+        raise SystemExit(_t(
+            f"--mine needs the aihubmix CLI. Run `install-cli` (or add --auto-install). Project: {CLI_REPO_URL}",
+            f"--mine 需要 aihubmix CLI。先运行 `install-cli`（或加 --auto-install）。项目主页：{CLI_REPO_URL}"))
+    try:
+        result = subprocess.run([exe, "models", "list", "-j"], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise SystemExit(f"`aihubmix models list` failed: {exc}")
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        if "未登录" in detail or "login" in detail.lower() or "token" in detail.lower():
+            raise SystemExit(_t(
+                f"Not logged in. Run `aihubmix login` first, or drop --mine. Project: {CLI_REPO_URL}",
+                f"尚未登录。请先 `aihubmix login`，或去掉 --mine。项目主页：{CLI_REPO_URL}"))
+        raise SystemExit(f"`aihubmix models list` error: {detail[:200]}")
+    try:
+        data = json.loads(result.stdout)
+    except ValueError:
+        raise SystemExit("could not parse `aihubmix models list -j` output")
+    rows = data.get("data") if isinstance(data, dict) else data
+    return {
+        str(row.get("model")).strip().lower()
+        for row in (rows or [])
+        if isinstance(row, dict) and row.get("model")
+    }
+
+
+def cmd_candidates(args: argparse.Namespace) -> None:
+    cap = resolve_capability(getattr(args, "capability", None))
+    spec = CAPABILITY_SPECS[cap]
+    models = extract_models(load_json_source(args.source))
+
+    mine = None
+    if getattr(args, "mine", False):
+        mine = _my_callable_models(auto_install=getattr(args, "auto_install", False))
+
+    picked: list[tuple[dict[str, Any], bool, str]] = []
+    for item in models:
+        if spec["require_chat"] and _is_non_chat(item):
+            continue
+        exclude_re = spec.get("_exclude_re")
+        if exclude_re and exclude_re.search(f"{model_id(item)} {model_label(item)}"):
+            continue
+        if mine is not None and model_id(item).strip().lower() not in mine:
+            continue  # keep only models the user's token can actually call
+        signals = _capability_signals(item, spec)
+        if not signals:
+            continue
+        strong = ("protocol" in signals) or ("family" in signals)
+        picked.append((item, strong, "+".join(signals)))
+    # Reliable protocol/family matches first, then noisier modality-only ones.
+    picked.sort(key=lambda row: (0 if row[1] else 1, model_id(row[0]).lower()))
+    selected = [(item, signal) for item, _strong, signal in picked[: args.limit]]
+
+    if args.json:
+        print(json.dumps(
+            [
+                {
+                    "capability": cap,
+                    "mine": mine is not None,
+                    "model_id": model_id(item),
+                    "name": model_label(item),
+                    "signal": signal,
+                    "features": features(item),
+                    "context": context_display(item),
+                }
+                for item, signal in selected
+            ],
+            ensure_ascii=False,
+            indent=2,
+        ))
+        return
+
+    mine_en = " callable by your token" if mine is not None else ""
+    mine_zh = "（已按你的 token 可调过滤）" if mine is not None else ""
+    print(_t(
+        f"AIHubMix candidate models for capability '{cap}'{mine_en} (broad heuristic: protocol / family / modality; no default picked)",
+        f"AIHubMix【{spec['label']}】候选模型{mine_zh}（宽口径启发式：协议 / 家族名 / modality 字段；不替你挑默认）",
+    ))
+    if mine is not None and not selected:
+        print(_t(
+            f"\nNone of the '{cap}' candidates are callable by your token. Try without --mine, or check `aihubmix models list`.",
+            f"\n你的 token 在【{cap}】下没有可调候选。可去掉 --mine，或查 `aihubmix models list`。",
+        ))
+        return
+    print(_t(
+        "Note: a candidate is not a guarantee; pick per task (you/the LLM), then confirm with `doctor`.",
+        "注意：候选不等于确定可用；请由调用方/LLM 按任务从中挑选，再用 `doctor` 实测确认。",
+    ))
+    print()
+    rows = [
+        [model_id(item), model_label(item), signal, features(item) or "-", context_display(item)]
+        for item, signal in selected
+    ]
+    print_table(["model_id", "name", "signal", "features/modalities", "context"], rows)
+    mine_foot_en = " | filtered to your token" if mine is not None else ""
+    mine_foot_zh = " | 已按你的 token 过滤" if mine is not None else ""
+    print(_t(
+        f"\ncapability: {cap} | {len(selected)} candidates{mine_foot_en} | source: {display_models_source()}",
+        f"\n能力: {cap} | 共 {len(selected)} 个候选{mine_foot_zh} | source: {display_models_source()}",
+    ))
+    print(_t(
+        "signal: protocol=endpoint type; family=known family name (both reliable); modality=metadata keyword only (noisy, verify).",
+        "signal: protocol=接口类型匹配；family=按已知家族名匹配（均较可靠）；modality=仅元数据出现关键词（噪声大，需实测）。",
+    ))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Query AIHubMix models and API contract helpers.")
+    parser.add_argument(
+        "--lang", choices=["en", "zh"],
+        help="Output language for status lines/labels (default: env AIHUBMIX_LANG or en).",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     list_parser = subparsers.add_parser("list", help="List models from the models API.")
@@ -1736,13 +2743,11 @@ def build_parser() -> argparse.ArgumentParser:
     report_parser.add_argument("--os", choices=["auto", "windows", "mac", "linux"], default="auto")
     report_parser.set_defaults(func=cmd_report)
 
-    protocols_parser = subparsers.add_parser("protocols", help="Summarize aihubmix-openapi operations.")
-    protocols_parser.add_argument("--repo", help="Path to AIhubmix/aihubmix-openapi checkout.")
+    protocols_parser = subparsers.add_parser("protocols", help="Summarize live aihubmix OpenAPI operations (remote).")
     protocols_parser.add_argument("--json", action="store_true")
     protocols_parser.set_defaults(func=cmd_protocols)
 
-    error_contract_parser = subparsers.add_parser("error-contract", help="Summarize gateway/errors.yml GatewayError contract.")
-    error_contract_parser.add_argument("--repo", help="Path to AIhubmix/aihubmix-openapi checkout.")
+    error_contract_parser = subparsers.add_parser("error-contract", help="Summarize the GatewayError contract from the live OpenAPI spec (remote).")
     error_contract_parser.add_argument("--json", action="store_true")
     error_contract_parser.set_defaults(func=cmd_error_contract)
 
@@ -1758,9 +2763,9 @@ def build_parser() -> argparse.ArgumentParser:
     sdk_info_parser.add_argument("--version", default=SDK_RECOMMENDED_VERSION, help="SDK version to inspect from npm when no package is installed.")
     sdk_info_parser.add_argument(
         "--source",
-        choices=["auto", "installed", "npm", "baseline"],
+        choices=["auto", "installed", "npm"],
         default="auto",
-        help="SDK metadata source. baseline is offline and pinned to the recommended SDK surface.",
+        help="SDK metadata source. npm reads the package tarball from the npm registry.",
     )
     sdk_info_parser.add_argument("--json", action="store_true")
     sdk_info_parser.set_defaults(func=cmd_sdk_info)
@@ -1768,8 +2773,8 @@ def build_parser() -> argparse.ArgumentParser:
     example_parser = subparsers.add_parser("example", help="Generate minimal API call examples.")
     example_parser.add_argument(
         "protocol",
-        choices=["chat", "responses", "messages", "gemini"],
-        help="Protocol shape to generate.",
+        choices=sorted([*PROTOCOL_SPECS.keys(), *PROTOCOL_ALIASES.keys()]),
+        help="Protocol or endpoint shape to generate.",
     )
     example_parser.add_argument("--model", required=True)
     example_parser.add_argument("--lang", choices=["both", "curl", "python", "js", "json"], default="both")
@@ -1783,8 +2788,52 @@ def build_parser() -> argparse.ArgumentParser:
     troubleshoot_parser.add_argument("--endpoint")
     troubleshoot_parser.add_argument("--model")
     troubleshoot_parser.add_argument("--request-id")
-    troubleshoot_parser.add_argument("--repo", help="Path to AIhubmix/aihubmix-openapi checkout for GatewayError contract matching.")
+    troubleshoot_parser.add_argument("--contract", action="store_true", help="Also fetch the live GatewayError contract (remote) and show a match.")
     troubleshoot_parser.set_defaults(func=cmd_troubleshoot)
+
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help="Preflight an AIHubMix key: verify auth, then optionally smoke-test text and image input on a chosen model.",
+    )
+    doctor_parser.add_argument("--key", help="API key. Defaults to env AIHUBMIX_API_KEY. Never printed in full.")
+    doctor_parser.add_argument("--base-url", help="OpenAI-compatible base. Defaults to env AIHUBMIX_BASE_URL or https://aihubmix.com/v1.")
+    doctor_parser.add_argument("--model", help="Model id to smoke-test (text; also image with --image).")
+    doctor_parser.add_argument("--image", action="store_true", help="Also probe image input on --model.")
+    doctor_parser.add_argument("--timeout", type=float, default=30)
+    doctor_parser.set_defaults(func=cmd_doctor)
+
+    candidates_parser = subparsers.add_parser(
+        "candidates",
+        help="List a BROAD candidate range for a capability (vision/image-gen/video/audio-tts/audio-stt/embedding/rerank); caller/LLM picks, tool chooses no default.",
+    )
+    candidates_parser.add_argument(
+        "--capability", "-c", required=True,
+        help="Capability or alias. One of: " + ", ".join(CAPABILITY_SPECS) + ".",
+    )
+    candidates_parser.add_argument("--source", help="Models JSON URL, local JSON file, or '-' for stdin.")
+    candidates_parser.add_argument("--limit", type=int, default=40)
+    candidates_parser.add_argument("--json", action="store_true")
+    candidates_parser.add_argument("--mine", action="store_true", help="Filter to models your token can actually call (needs the aihubmix CLI + login).")
+    candidates_parser.add_argument("--auto-install", action="store_true", help="With --mine: install the aihubmix CLI automatically if missing.")
+    candidates_parser.set_defaults(func=cmd_candidates)
+
+    vision_parser = subparsers.add_parser(
+        "vision-candidates",
+        help="Alias for `candidates --capability vision`.",
+    )
+    vision_parser.add_argument("--source", help="Models JSON URL, local JSON file, or '-' for stdin.")
+    vision_parser.add_argument("--limit", type=int, default=40)
+    vision_parser.add_argument("--json", action="store_true")
+    vision_parser.add_argument("--mine", action="store_true", help="Filter to models your token can actually call.")
+    vision_parser.add_argument("--auto-install", action="store_true", help="With --mine: install the aihubmix CLI automatically if missing.")
+    vision_parser.set_defaults(func=cmd_candidates, capability="vision")
+
+    install_cli_parser = subparsers.add_parser(
+        "install-cli",
+        help="Install the companion aihubmix CLI via its official per-OS installer.",
+    )
+    install_cli_parser.add_argument("--force", action="store_true", help="Reinstall even if already present.")
+    install_cli_parser.set_defaults(func=cmd_install_cli)
 
     return parser
 
@@ -1792,8 +2841,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
-    args.func(args)
-    return 0
+    global _LANG
+    _LANG = (args.lang or os.environ.get("AIHUBMIX_LANG") or "en").strip().lower()
+    if _LANG not in ("en", "zh"):
+        _LANG = "en"
+    result = args.func(args)
+    return result if isinstance(result, int) else 0
 
 
 if __name__ == "__main__":
