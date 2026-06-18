@@ -93,7 +93,7 @@
 
 ## 当前 Skills
 
-- `skills/aihubmix-api/`：AIHubMix API 集成助手。实时查询模型 / 能力 / 价格，按能力（视觉、文生图、视频、音频、向量等）筛选候选模型，生成 OpenAI / Anthropic / Gemini 多协议调用示例，`doctor` 预检 API Key（真实调用验证、余额/欠费识别、图片输入实测），远程 OpenAPI 契约与报错排查。并集成官方 `aihubmix` CLI 获取**账户级**信息：余额、API Key 管理、以及"当前 token 真正可调的模型"（`candidates --mine`）。脚本仅用 Python 标准库、数据全部实时获取（无缓存、无本地仓库依赖）；输出中英双语；为 Codex + Claude Code 双平台通用版本（含 `agents/openai.yaml`，Claude 会自动忽略）。
+- `skills/aihubmix-api/`：AIHubMix API 集成助手。实时查询模型 / 能力 / 价格，按能力（视觉、文生图、视频、音频、向量等）筛选候选模型，生成 OpenAI / Anthropic / Gemini 多协议调用示例，`doctor` 预检 API Key（真实调用验证、余额/欠费识别、图片输入实测），远程 OpenAPI 契约与报错排查。并集成官方 `aihubmix` CLI 获取**账户级**信息：余额、API Key 管理、以及"当前 token 真正可调的模型"（`candidates --mine`）。脚本仅用 Python 标准库、数据全部实时获取（无缓存、无本地仓库依赖）；输出中英双语。**平台无关的通用 skill**：核心是纯标准库 Python CLI + 纯 Markdown 指令，任何 Agent 平台都能用——在支持 skill 约定的平台上可直接作为技能加载，其它平台也可以直接运行其 CLI 或把 `SKILL.md` 当作指令（仓库内含 Codex 用的 `agents/openai.yaml`，不识别它的平台会自动忽略）。
 - `skills/openclaw-install-assistant/`：OpenClaw 安装、配置、升级、健康检查与恢复
 
 ## 模板目录
