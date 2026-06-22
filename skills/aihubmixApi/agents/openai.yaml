@@ -1,0 +1,4 @@
+interface:
+  display_name: "AIHubMix API"
+  short_description: "Integrate AIHubMix APIs and query live model metadata"
+  default_prompt: "Use $aihubmixApi to integrate AIHubMix into a project, choose a model, generate runnable examples, or troubleshoot API calls."
