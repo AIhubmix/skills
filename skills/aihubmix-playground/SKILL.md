@@ -1,6 +1,6 @@
 ---
 name: aihubmix-playground
-description: "Try, tune, and compare 500+ AI models on AIHubMix from a coding agent — live model discovery, four wire protocols (Chat Completions/Responses/Messages/Gemini), image/video generation, model comparison on the same prompt, and handoff links that open a preconfigured Playground (playground.aihubmix.com) in the user's browser. Use for Chinese or English requests about trying/testing a model (试用/测试模型), picking the best model for a task (选型/哪个模型好), tuning prompts or parameters (调参/温度/reasoning), comparing models side by side (对比/PK), generating images or video through AIHubMix (文生图/文生视频), or sharing a configured Playground link (深链/链接直达). For integrating AIHubMix into an app or generating SDK code, prefer the aihubmixApi skill; this skill covers the try-tune-compare-handoff loop."
+description: "Try, tune, and compare 500+ AI models on AIHubMix from a coding agent — live model discovery, four wire protocols (Chat Completions/Responses/Messages/Gemini), image/video generation, model comparison on the same prompt, and handoff links that open a preconfigured Playground (playground.aihubmix.com) in the user's browser. Use for Chinese or English requests about trying/testing a model (试用/测试模型), picking the best model for a task (选型/哪个模型好), tuning prompts or parameters (调参/温度/reasoning), comparing models on the same prompt (对比/PK), generating images or video through AIHubMix (文生图/文生视频), or sharing a configured Playground link (深链/链接直达). For integrating AIHubMix into an app or generating SDK code, prefer the aihubmixApi skill; this skill covers the try-tune-compare-handoff loop."
 ---
 
 # AIHubMix Playground for Agents
@@ -83,7 +83,7 @@ Media endpoints live under `/ai/v1` and each media model's llms.txt carries its 
 
 When the user wants to continue by hand (tweak parameters, iterate on a prompt visually), generate a link that opens the Playground preconfigured:
 
-- Compare N models: `https://playground.aihubmix.com/?models=<id1>,<id2>,<id3>` (up to 6)
+- Open N models at once: `https://playground.aihubmix.com/?models=<id1>,<id2>,<id3>` (up to 6, one tab per model; the Playground has no side-by-side view, so run comparisons yourself via the API and hand over tabs for the human to inspect)
 - One configured session:
 
 ```
