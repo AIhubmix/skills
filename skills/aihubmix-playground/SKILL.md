@@ -83,7 +83,7 @@ Media endpoints live under `/ai/v1` and each media model's llms.txt carries its 
 
 When the user wants to continue by hand (tweak parameters, iterate on a prompt visually), generate a link that opens the Playground preconfigured:
 
-- Compare N models: `https://playground.aihubmix.com/?models=<id1>,<id2>,<id3>` (up to 6)
+- Open N models at once: `https://playground.aihubmix.com/?models=<id1>,<id2>,<id3>` (up to 6, one tab per model; the Playground has no side-by-side view, so run comparisons yourself via the API and hand over tabs for the human to inspect)
 - One configured session:
 
 ```
